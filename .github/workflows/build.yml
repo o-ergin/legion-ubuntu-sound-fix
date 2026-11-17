@@ -132,7 +132,9 @@ jobs:
 
       - name: Check driver, fixup and firmware name
         run: |
-          D=/tmp/m/lib/modules/${{ steps.k.outputs.kver }}/kernel/sound
+          # 26.10 packages modules under /usr/lib/modules (usr-merge); older releases used /lib/modules.
+          D=$(ls -d /tmp/m/usr/lib/modules/${{ steps.k.outputs.kver }}/kernel/sound /tmp/m/lib/modules/${{ steps.k.outputs.kver }}/kernel/sound 2>/dev/null | head -n1)
+          [ -n "$D" ] || { echo "::error::no kernel/sound directory in the modules package"; exit 1; }
           SC=$(ls $D/hda/codecs/side-codecs/snd-hda-scodec-aw88399.ko* 2>/dev/null) ||
             { echo "::error::snd-hda-scodec-aw88399 is missing from this kernel"; exit 1; }
           ls $D/hda/codecs/side-codecs/snd-hda-scodec-aw88399-i2c.ko* >/dev/null ||
