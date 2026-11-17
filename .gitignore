@@ -1,0 +1,13 @@
+firmware/*.bin
+dkms/common/
+dkms/codecs/
+dkms/lib/aw88395/
+dkms/.ksrc/
+*.o
+*.ko
+*.mod
+*.mod.c
+*.cmd
+.*.cmd
+modules.order
+Module.symvers

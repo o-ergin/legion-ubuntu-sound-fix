@@ -1,0 +1,88 @@
+--- a/sound/hda/codecs/realtek/alc269.c	2026-11-17 16:00:49.651589436 +0300
++++ b/sound/hda/codecs/realtek/alc269.c	2026-11-17 16:00:49.664898513 +0300
+@@ -3318,6 +3318,42 @@
+ 	comp_generic_fixup(cdc, action, "i2c", "TXNW2781", "-%s:00-tas2781-hda.%d", 1);
+ }
+ 
++/*
++ * DKMS backport: on Linux 7.0 both AW88399 amps are driven by ONE component,
++ * i2c-AWDZ8399:00 (mainline uses two serial-multi-instantiate clients:
++ * "-%s:00-aw88399-hda.%d", 2), see aw88399_hda_legion.c.
++ */
++static void aw88399_fixup_i2c_one(struct hda_codec *cdc, const struct hda_fixup *fix, int action)
++{
++	comp_generic_fixup(cdc, action, "i2c", "AWDZ8399", "-%s:00", 1);
++}
++
++/* Verbatim from mainline (Linux 7.4-rc3) */
++static void alc287_fixup_legion_16iax10h_aw88399(struct hda_codec *codec,
++						 const struct hda_fixup *fix, int action)
++{
++	/*
++	 * Force DAC 0x02 for the bass speaker 0x17, as the default 0x06 lacks volume controls.
++	 */
++	static const hda_nid_t conn[] = { 0x02 };
++	struct alc_spec *spec = codec->spec;
++
++	alc269_fixup_limit_int_mic_boost(codec, fix, action);
++	alc_fixup_headset_mode_no_hp_mic(codec, fix, action);
++	alc_fixup_headset_jack(codec, fix, action);
++
++	switch (action) {
++	case HDA_FIXUP_ACT_PRE_PROBE:
++		spec->gen.suppress_auto_mic = 1;
++		snd_hda_override_conn_list(codec, 0x17, ARRAY_SIZE(conn), conn);
++		break;
++	case HDA_FIXUP_ACT_BUILD:
++		spec->gen.multiout.max_channels = 2;
++		spec->gen.pcm_rec[0]->stream[SNDRV_PCM_STREAM_PLAYBACK].channels_max = 2;
++		break;
++	}
++}
++
+ static void yoga7_14arb7_fixup_i2c(struct hda_codec *cdc,
+ 	const struct hda_fixup *fix, int action)
+ {
+@@ -4138,6 +4174,8 @@
+ 	ALC245_FIXUP_TAS2781_SPI_2,
+ 	ALC287_FIXUP_TXNW2781_I2C,
+ 	ALC287_FIXUP_TXNW2781_I2C_ASUS,
++	ALC287_FIXUP_AW88399_I2C_ONE,
++	ALC287_FIXUP_LENOVO_LEGION_AW88399,
+ 	ALC287_FIXUP_YOGA7_14ARB7_I2C,
+ 	ALC245_FIXUP_HP_MUTE_LED_COEFBIT,
+ 	ALC245_FIXUP_HP_MUTE_LED_V1_COEFBIT,
+@@ -6510,6 +6548,16 @@
+ 		.chained = true,
+ 		.chain_id = ALC285_FIXUP_THINKPAD_NO_BASS_SPK_HEADSET_JACK,
+ 	},
++	[ALC287_FIXUP_AW88399_I2C_ONE] = {
++		.type = HDA_FIXUP_FUNC,
++		.v.func = aw88399_fixup_i2c_one,
++	},
++	[ALC287_FIXUP_LENOVO_LEGION_AW88399] = {
++		.type = HDA_FIXUP_FUNC,
++		.v.func = alc287_fixup_legion_16iax10h_aw88399,
++		.chained = true,
++		.chain_id = ALC287_FIXUP_AW88399_I2C_ONE,
++	},
+ 	[ALC287_FIXUP_TAS2781_I2C] = {
+ 		.type = HDA_FIXUP_FUNC,
+ 		.v.func = tas2781_fixup_tias_i2c,
+@@ -7855,6 +7903,8 @@
+ 	SND_PCI_QUIRK(0x17aa, 0x38fc, "Lenovo Yoga Pro 7 15ASH11", ALC287_FIXUP_LENOVO_YOGA_PRO7),
+ 	SND_PCI_QUIRK(0x17aa, 0x38fd, "ThinkBook plus Gen5 Hybrid", ALC287_FIXUP_TAS2781_I2C),
+ 	SND_PCI_QUIRK(0x17aa, 0x3902, "Lenovo E50-80", ALC269_FIXUP_DMIC_THINKPAD_ACPI),
++	HDA_CODEC_QUIRK(0x17aa, 0x3906, "Legion Pro 7i 16IAX10H / Y9000P IAX10", ALC287_FIXUP_LENOVO_LEGION_AW88399),
++	HDA_CODEC_QUIRK(0x17aa, 0x3907, "Legion Pro 7i 16IAX10H / Y9000P IAX10", ALC287_FIXUP_LENOVO_LEGION_AW88399),
+ 	SND_PCI_QUIRK(0x17aa, 0x390d, "Lenovo Yoga Pro 7 14ASP10", ALC287_FIXUP_YOGA9_14IAP7_BASS_SPK_PIN),
+ 	SND_PCI_QUIRK(0x17aa, 0x3911, "Lenovo Yoga Pro 7 14IAH10", ALC287_FIXUP_YOGA9_14IAP7_BASS_SPK_PIN),
+ 	SND_PCI_QUIRK(0x17aa, 0x3912, "Lenovo Xiaoxin 14 GT", ALC287_FIXUP_YOGA9_14IAP7_BASS_SPK_PIN),
+@@ -8152,6 +8202,7 @@
+ 	{.id = ALC285_FIXUP_HP_ENVY_X360, .name = "alc285-hp-envy-x360"},
+ 	{.id = ALC287_FIXUP_IDEAPAD_BASS_SPK_AMP, .name = "alc287-ideapad-bass-spk-amp"},
+ 	{.id = ALC287_FIXUP_YOGA9_14IAP7_BASS_SPK_PIN, .name = "alc287-yoga9-bass-spk-pin"},
++	{.id = ALC287_FIXUP_LENOVO_LEGION_AW88399, .name = "alc287-lenovo-legion-aw88399"},
+ 	{.id = ALC623_FIXUP_LENOVO_THINKSTATION_P340, .name = "alc623-lenovo-thinkstation-p340"},
+ 	{.id = ALC255_FIXUP_ACER_HEADPHONE_AND_MIC, .name = "alc255-acer-headphone-and-mic"},
+ 	{.id = ALC285_FIXUP_HP_GPIO_AMP_INIT, .name = "alc285-hp-amp-init"},
