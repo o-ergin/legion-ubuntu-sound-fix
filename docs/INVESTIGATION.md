@@ -80,13 +80,37 @@ Device (SPKR) in \_SB.PC02.I2C2
     - ACPI channel fallback
   - the aw88395 parser is identical apart from allocator helpers and an annotation
 
-## 6. Mistakes made and corrected during this investigation
+## 6. After upgrading to Ubuntu 26.10 (kernel 7.3.0-10-generic)
+
+All verified on the machine:
+- The DKMS backport skipped 7.3 by design.
+- 7.3 ships:
+  - `snd-hda-scodec-aw88399` and `snd-hda-scodec-aw88399-i2c` (ACPI `AWDZ8399`)
+  - `alc287_fixup_legion_16iax10h_aw88399` in `snd-hda-codec-alc269`
+- The ACPI node is now split by `serial-multi-instantiate` into `i2c-AWDZ8399:00-aw88399-hda.0` and
+  `.1`. There is no plain `i2c-AWDZ8399:00` client anymore, so `snd_soc_aw88399` has nothing to claim.
+- Ubuntu's 7.3 driver declares `firmware: aw88399_acf.bin`: firmware root, no SSID in the name. That
+  differs from mainline 7.4's `awinic/aw88399_acf_<_SUB>.bin`.
+  - 26.10's `linux-firmware` (20260915) ships no AW88399 file.
+  - At boot, both amps failed: `Direct firmware load for aw88399_acf.bin failed with error -2` and
+    `Chip initialization failed`. The sound was thin again.
+- The fix:
+  - copy the same tuning file (SHA-256 `1e927c9b…`) to `/lib/firmware/updates/aw88399_acf.bin`
+  - reload `snd_hda_scodec_aw88399_i2c`
+- Result:
+  - both amps bound, `channel: 0` and `channel: 1`
+  - a 150 Hz tone played from both woofers, by ear
+- 2.1's login check stayed silent through all this, because it only looked for the 7.0-style
+  `i2c-AWDZ8399:00` device. 2.2 fixes that.
+
+## 7. Mistakes made and corrected during this investigation
 
 | Initial claim | Correction |
 |---|---|
 | Sound is thin because the amps run on default settings | The amps are powered down. Only the codec-driven tweeters play. |
 | "NOCLKS during playback" proves the amps get no I2S clock | Not evidence: the clock detector reads that way while the amp is powered down. Mainline works in legacy HDA mode. |
 | A hand-written driver (v1, never installed) was fine | It lacked the `0x17`→DAC `0x02` reroute, so the woofer level would have ignored the volume slider. It also lacked the EPS/BSTS fix, so the amps would most likely never have started. Replaced by this mainline backport. |
+| On 7.3+ "the stock driver uses the firmware already installed under `/lib/firmware/updates/awinic/`" (README, 2.1) | Ubuntu's 7.3 driver requests `aw88399_acf.bin` at the firmware root. That claim was an assumption from mainline 7.4 and was never checked against Ubuntu's 7.3. |
 | `dmic_detect=0` in modprobe.d was a useless leftover | It forces legacy HDA, which is also the automatic choice here. Harmless, left alone. |
 | Windows uses Dolby | The Windows package contains Nahimic and Elevoc. |
 

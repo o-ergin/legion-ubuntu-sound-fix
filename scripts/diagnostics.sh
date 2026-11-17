@@ -23,21 +23,27 @@ dkms status legion-aw88399 2>&1
 compgen -G "/usr/src/legion-aw88399-*" || echo "no /usr/src/legion-aw88399-*"
 
 sec "Install footprint"
-for f in /lib/firmware/updates/awinic/aw88399_acf_17aa3906.bin /lib/firmware/updates/awinic/aw88399_acf_17aa3907.bin \
-	/lib/firmware/awinic/aw88399_acf_17aa3906.bin* /lib/firmware/awinic/aw88399_acf_17aa3907.bin*; do
+for f in /lib/firmware/updates/aw88399_acf.bin /lib/firmware/updates/awinic/aw88399_acf_17aa390[67].bin \
+	/lib/firmware/aw88399_acf.bin* /lib/firmware/awinic/aw88399_acf_17aa390[67].bin*; do
 	[ -e "$f" ] && echo "$(sha256sum "$f" | cut -c1-16)…  $f"
 done
 cat /etc/modprobe.d/legion-aw88399.conf 2>/dev/null | grep -v '^#' || echo "no /etc/modprobe.d/legion-aw88399.conf"
-for f in /etc/apt/apt.conf.d/99legion-aw88399 /usr/lib/legion-aw88399/apt-hook /usr/lib/legion-aw88399/login-check \
-	/usr/local/sbin/legion-aw88399-rebuild /etc/xdg/autostart/legion-aw88399-check.desktop; do
+for f in /usr/lib/legion-aw88399/login-check /etc/xdg/autostart/legion-aw88399-check.desktop; do
 	[ -e "$f" ] && echo "present: $f" || echo "MISSING: $f"
+done
+for f in /etc/apt/apt.conf.d/99legion-aw88399 /usr/lib/legion-aw88399/apt-hook /usr/local/sbin/legion-aw88399-rebuild; do
+	[ -e "$f" ] && echo "present: $f (7.0 backport only)" || echo "absent:  $f (7.0 backport only)"
 done
 ls /var/lib/legion-aw88399/ 2>/dev/null | sed 's/^/state: /'
 
 sec "Modules"
-for m in snd-hda-codec-alc269 snd-soc-aw88399-lib snd-hda-scodec-aw88399-legion snd-hda-scodec-aw88399-i2c snd-soc-aw88399; do
+for m in snd-hda-codec-alc269 snd-soc-aw88399-lib snd-hda-scodec-aw88399-legion snd-hda-scodec-aw88399 snd-hda-scodec-aw88399-i2c snd-soc-aw88399; do
 	printf '%-32s %s\n' "$m" "$(modinfo -k "$K" -F filename "$m" 2>/dev/null || echo '(not available)')"
 done
+if modinfo -k "$K" snd-hda-scodec-aw88399 >/dev/null 2>&1; then
+	echo "mode: stock kernel driver; it requests firmware: $(modinfo -k "$K" -F firmware snd-hda-scodec-aw88399 | tr '\n' ' ')"
+elif [[ "$K" =~ ^7\.0\.0-[0-9]+-generic$ ]]; then echo "mode: 7.0 DKMS backport"
+else echo "mode: unsupported kernel"; fi
 lsmod | grep -E '^(snd_hda_codec_alc269|snd_soc_aw88399|snd_hda_scodec_aw88399|snd_hda_intel|snd_sof)' || true
 
 sec "ACPI / I2C"
@@ -60,7 +66,8 @@ done
 sec "Amplifier registers"
 if [ $have_root = yes ]; then
 	modprobe i2c-dev
-	BUS=$(basename "$(readlink -f /sys/bus/i2c/devices/i2c-AWDZ8399:00/.. 2>/dev/null)" 2>/dev/null); BUS=${BUS#i2c-}
+	AMPDEV=$(compgen -G "/sys/bus/i2c/devices/i2c-AWDZ8399:00*" | head -n1)
+	BUS=$(basename "$(readlink -f "$AMPDEV/.." 2>/dev/null)" 2>/dev/null); BUS=${BUS#i2c-}
 	if [ -n "$BUS" ] && command -v i2cget >/dev/null; then
 		rd() { local w; w=$(i2cget -f -y "$BUS" "$1" "$2" w 2>/dev/null) || { echo "ERR"; return; }; printf '0x%04x' $(( ((w & 0xff) << 8) | (w >> 8) )); }
 		for a in 0x35 0x34; do echo "$a id=$(rd $a 0x00) SYSST=$(rd $a 0x01) SYSCTRL=$(rd $a 0x04)"; done

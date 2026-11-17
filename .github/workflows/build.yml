@@ -1,6 +1,7 @@
 name: build
 
-# Builds the DKMS package against Ubuntu's newest 7.0 kernel, the same way DKMS does on a laptop.
+# 26.04: builds the DKMS backport against the newest 7.0 kernel, the same way DKMS does on a laptop.
+# 26.10: checks that the newest 7.3+ kernel still ships the driver this repo relies on.
 # The "proposed" job tests kernels that have not yet reached users, so a breaking Ubuntu update
 # shows up here before apt installs it.
 on:
@@ -19,7 +20,7 @@ defaults:
 
 jobs:
   build:
-    name: kernel (${{ matrix.pocket }})
+    name: 26.04 backport build (${{ matrix.pocket }})
     runs-on: ubuntu-latest
     container: ubuntu:26.04
     strategy:
@@ -91,6 +92,62 @@ jobs:
             [ "${vm%% *}" = "${{ steps.k.outputs.kver }}" ] || { echo "::error::vermagic mismatch for $m"; exit 1; }
           done
           echo "Built 3 modules OK." >>"$GITHUB_STEP_SUMMARY"
+
+  # Ubuntu 26.10 (kernel 7.3+) uses the kernel's own driver. This repo only supplies the tuning file.
+  # This job checks the newest 26.10 kernel for three things that would break that: the driver is
+  # gone, the Legion codec fixup is gone, or the driver requests a firmware name install.sh doesn't
+  # provide.
+  stock:
+    name: 26.10 stock driver (${{ matrix.pocket }})
+    runs-on: ubuntu-latest
+    container: ubuntu:26.10
+    strategy:
+      fail-fast: false
+      matrix:
+        pocket: [updates, proposed]
+    steps:
+      - name: Enable stonking-proposed
+        if: matrix.pocket == 'proposed'
+        run: |
+          cat > /etc/apt/sources.list.d/proposed.sources <<'EOF'
+          Types: deb
+          URIs: http://archive.ubuntu.com/ubuntu
+          Suites: stonking-proposed
+          Components: main
+          Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+          EOF
+
+      - name: Download the newest kernel's modules
+        id: k
+        run: |
+          apt-get update -q
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends kmod zstd binutils
+          V=$(apt-cache madison linux-image-generic | awk '{print $3}' | sort -V | tail -n1)
+          ABI=${V%.*}                                   # 7.3.0-10.10 -> 7.3.0-10
+          K="$ABI-generic"
+          echo "### ${{ matrix.pocket }}: linux $V ($K)" >>"$GITHUB_STEP_SUMMARY"
+          cd /tmp && apt-get download "linux-modules-$K=$V"
+          dpkg-deb -x /tmp/linux-modules-"$K"_*.deb /tmp/m
+          echo "kver=$K" >>"$GITHUB_OUTPUT"
+
+      - name: Check driver, fixup and firmware name
+        run: |
+          D=/tmp/m/lib/modules/${{ steps.k.outputs.kver }}/kernel/sound
+          SC=$(ls $D/hda/codecs/side-codecs/snd-hda-scodec-aw88399.ko* 2>/dev/null) ||
+            { echo "::error::snd-hda-scodec-aw88399 is missing from this kernel"; exit 1; }
+          ls $D/hda/codecs/side-codecs/snd-hda-scodec-aw88399-i2c.ko* >/dev/null ||
+            { echo "::error::snd-hda-scodec-aw88399-i2c is missing"; exit 1; }
+          ALC=$(ls $D/hda/codecs/realtek/snd-hda-codec-alc269.ko*)
+          zstdcat -f "$ALC" | strings | grep -qx alc287_fixup_legion_16iax10h_aw88399 ||
+            { echo "::error::the Legion AW88399 codec fixup is missing from snd-hda-codec-alc269"; exit 1; }
+          FWS=$(modinfo -F firmware "$SC")
+          echo "driver requests: $FWS" | tee -a "$GITHUB_STEP_SUMMARY"
+          for f in $FWS; do
+            case "$f" in
+              aw88399_acf.bin|awinic/aw88399_acf_*.bin) ;;   # installed by install.sh
+              *) echo "::warning::new firmware name '$f'. install.sh adds plain names automatically; check the README." ;;
+            esac
+          done
 
   firmware:
     runs-on: ubuntu-latest
