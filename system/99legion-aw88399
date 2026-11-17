@@ -1,0 +1,3 @@
+// legion-aw88399: after each dpkg run, build the speaker driver for a new 7.0 kernel once its
+// matching linux-source-7.0.0 is installed. The hook never fails apt. See /usr/lib/legion-aw88399/apt-hook.
+DPkg::Post-Invoke { "if [ -x /usr/lib/legion-aw88399/apt-hook ]; then /usr/lib/legion-aw88399/apt-hook || true; fi"; };

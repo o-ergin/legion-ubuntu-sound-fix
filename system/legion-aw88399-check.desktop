@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Legion speaker driver check
+Comment=Notify if the AW88399 woofer driver is missing for the running kernel
+Exec=/usr/lib/legion-aw88399/login-check
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+X-GNOME-Autostart-Delay=20

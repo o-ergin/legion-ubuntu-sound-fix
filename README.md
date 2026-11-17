@@ -1,5 +1,7 @@
 # Legion Pro 7 16IAX10H: full speaker sound on Ubuntu 7.0 kernels (AW88399 DKMS backport)
 
+[![build](https://github.com/o-ergin/legion-pro7-16iax10h-aw88399-dkms/actions/workflows/build.yml/badge.svg)](https://github.com/o-ergin/legion-pro7-16iax10h-aw88399-dkms/actions/workflows/build.yml)
+
 On the Lenovo Legion Pro 7 16IAX10H (Intel, machine type 83F5), Linux only plays through **2 of the 4
 speakers**. The sound is thin, with no bass. The woofers are driven by two **Awinic AW88399** smart
 amplifiers. Linux 7.0 never powers those amplifiers up, so only the tweeters play. The tweeters are
@@ -29,25 +31,30 @@ which needs the NVIDIA DKMS driver to keep working.
 >    - the log shows no amp errors
 >    - the amps restart on the next playback, and the bass is unchanged on both sides
 >
-> Other kernels and the `17aa:3906` variant are untested.
+> The driver code is unchanged in 2.1. Version 2.1 adds the kernel-update handling, and that was
+> tested on the same machine: a mismatched kernel is skipped cleanly, and a real apt run rebuilds a
+> removed module. The `17aa:3906` variant is untested. CI builds every new Ubuntu 7.0 kernel, but
+> building is not the same as listening.
 
 ## Supported configuration (the installer refuses anything else)
 
 | | |
 |---|---|
 | Laptop | Lenovo Legion Pro 7 16IAX10H, DMI product `83F5` |
-| Codec | Realtek ALC287, codec SSID `17aa:3907` ("Y7P for Veco speaker") |
+| Codec | Realtek ALC287, codec SSID `17aa:3907` ("Y7P for Veco speaker"). `17aa:3906` needs `--allow-untested` |
 | Amps | 2× AW88399 at I2C `0x35` and `0x34`, ACPI `AWDZ8399` |
 | Kernel | Ubuntu `7.0.0-NN-generic` with a matching `linux-source-7.0.0` |
 | Audio driver | legacy HDA (`snd_hda_intel`). This is the kernel's automatic choice on this platform. |
 
-The `17aa:3906` variant ("YG speaker") uses the same firmware and the mainline quirk. The installer
-still only accepts `3907`, because that is the only variant tested here.
+The `17aa:3906` variant ("YG speaker") uses byte-identical firmware, the same mainline quirk and the
+same channel mapping. The driver and patch handle it already. The installer accepts it only with
+`sudo ./scripts/install.sh --allow-untested`, because nobody has tested it with this package yet. If you
+have a 3906, please open an issue with the diagnostics output, whether it works or not.
 
 ## Install
 
 ```bash
-sudo apt install dkms linux-source-7.0.0 curl
+sudo apt install dkms linux-source-7.0.0 linux-headers-$(uname -r) curl i2c-tools
 ./scripts/fetch-firmware.sh            # downloads + verifies the tuning file from linux-firmware
 sudo ./scripts/install.sh
 # turn speaker volume to ~15-20%, then reboot
@@ -55,13 +62,14 @@ sudo ./scripts/install.sh
 
 ## After installing: verify
 
-1. Run `sudo ./scripts/check-amps.sh`. It only reads registers and is safe. The log should show:
+1. Run `sudo legion-aw88399-diagnostics`. It only reads and is safe. The kernel log section should show:
    - `picked fixup … for codec SSID 17aa:3907`
    - `0x34: loaded firmware awinic/aw88399_acf_17aa3907.bin, channel 1`
    - `0x35: … channel 0`
    - `AW88399 Bound - SSID: 17AA3907`
 2. Play a test sound at low volume: `speaker-test -c 2 -t wav -l 1`.
-   - While it plays, run `check-amps.sh` again. Both amps should show `power=ON pll_locked=yes`.
+   - While it plays, run `sudo ./scripts/check-amps.sh`, the short register-only check. Both amps
+     should show `power=ON pll_locked=yes`.
    - "Front Left" should come from the left side, including its bass.
    - To test each woofer on its own, play a 150 Hz tone on one channel. Use `-s 1` for left and
      `-s 2` for right:
@@ -69,7 +77,8 @@ sudo ./scripts/install.sh
      80 Hz is mostly inaudible on laptop woofers.
    - The amps stay powered while any stream is open, even a paused browser tab. That is normal.
    - The kernel logs "module verification failed … tainting kernel" when Secure Boot is off.
-     That is expected for an unsigned out-of-tree module and harmless.
+     That is expected for an out-of-tree module whose signing key the kernel doesn't trust. It is
+     harmless.
 3. Move the volume slider. The bass must follow it.
 4. Plug in headphones. All speakers must go silent.
 5. Suspend, resume, and play again.
@@ -84,19 +93,30 @@ sudo ./scripts/uninstall.sh && reboot
 
 If a boot ever goes wrong, add `modprobe.blacklist=snd_hda_scodec_aw88399_legion` to the kernel command line.
 
-## Kernel updates
+## Kernel updates (automatic)
 
-`dkms/prepare.sh` rebuilds only from the **exact** Ubuntu source of the target kernel. It refuses to
+Normally you don't have to do anything. `sudo apt upgrade`, or the Software Updater, installs the new
+kernel together with the matching `linux-source-7.0.0`, and the driver is rebuilt for the new kernel
+before you reboot.
+
+`dkms/prepare.sh` builds only from the **exact** Ubuntu source of the target kernel. It **skips** the
 build, leaving the stock drivers (tweeters only) in place, if any of these is true:
 - the `linux-source-7.0.0` version doesn't match the kernel
 - the patch doesn't apply with zero fuzz
 - the kernel already contains AW88399 support
 
-After an Ubuntu kernel update:
+A skip uses DKMS's exit code 77, so **it never makes the kernel installation fail**. A plain build
+failure would abort the kernel package's postinst, before the initramfs and GRUB update.
 
-```bash
-sudo apt install linux-source-7.0.0 && sudo dkms autoinstall
-```
+Three pieces cover the gaps:
+
+| Piece | What it does |
+|---|---|
+| apt hook (`/etc/apt/apt.conf.d/99legion-aw88399`) | apt may configure the new kernel *before* the new kernel source arrives. After each apt or dpkg run, the hook builds the driver for the kernel that matches the installed source, if it is missing. It always lets apt succeed, and logs to `/var/log/legion-aw88399.log`. |
+| login check (`/etc/xdg/autostart/…`) | If you boot a 7.0 kernel without the driver, a desktop notification says so. It is silent when the fix is active, and on kernels that ship the mainline driver. |
+| `sudo legion-aw88399-rebuild [kernel]` | The manual fix. It installs the exact matching `linux-source-7.0.0` and headers, with apt's usual confirmation, then builds and installs the driver. |
+
+`linux-source-7.0.0` is marked as manually installed, so `apt autoremove` keeps it.
 
 Once Ubuntu ships a kernel that includes the driver (7.3 or later), the package stops building by
 design, and the stock driver uses the firmware already installed under `/lib/firmware/updates/awinic/`.
@@ -108,8 +128,13 @@ design, and the stock driver uses the firmware already installed under `/lib/fir
 | `/lib/modules/$(uname -r)/updates/dkms/snd-hda-codec-alc269.ko` | Ubuntu's own `alc269.c` plus mainline's Legion fixup (patch in `dkms/patches/`) |
 | `…/snd-soc-aw88399-lib.ko` | mainline `aw88399-lib.c` (3 marked 7.0-compat lines) |
 | `…/snd-hda-scodec-aw88399-legion.ko` | HDA side-codec glue (`dkms/hda/`) |
-| `/lib/firmware/updates/awinic/aw88399_acf_17aa3907.bin` | Awinic tuning file (from linux-firmware) |
+| `/lib/firmware/updates/awinic/aw88399_acf_17aa390{6,7}.bin` | Awinic tuning file (from linux-firmware; the two names are the same file) |
 | `/etc/modprobe.d/legion-aw88399.conf` | `blacklist snd_soc_aw88399` (the 7.0 ASoC driver would otherwise claim the device) |
+| `/etc/apt/apt.conf.d/99legion-aw88399`, `/usr/lib/legion-aw88399/apt-hook` | rebuild after apt runs (see above) |
+| `/etc/xdg/autostart/legion-aw88399-check.desktop`, `/usr/lib/legion-aw88399/login-check` | login notification if the driver is missing |
+| `/usr/local/sbin/legion-aw88399-rebuild`, `/usr/local/sbin/legion-aw88399-diagnostics` | manual rebuild; read-only diagnostics for bug reports |
+
+`scripts/uninstall.sh` removes all of these.
 
 ## How it works
 
@@ -131,6 +156,22 @@ design, and the stock driver uses the firmware already installed under `/lib/fir
 
 For the full diagnosis, including the mistakes made and corrected along the way, see
 [docs/INVESTIGATION.md](docs/INVESTIGATION.md).
+
+## Continuous integration
+
+[`.github/workflows/build.yml`](.github/workflows/build.yml) runs on every push and twice a week. It runs
+in an Ubuntu 26.04 container and runs `prepare.sh`, then the module build, against the newest 7.0 kernel in:
+- **`-updates`**: what users have now
+- **`-proposed`**: kernels that haven't reached users yet
+
+If an upcoming Ubuntu kernel changes `alc269.c` so that the patch no longer applies, the badge turns
+red before that kernel reaches anyone's laptop. The workflow also re-checks that linux-firmware still
+ships the expected tuning files, and runs shellcheck on the scripts.
+
+## Reporting problems
+
+Open an issue and include the output of `sudo legion-aw88399-diagnostics`. It only reads, and it
+leaves out serial numbers and the hostname.
 
 ## Credits
 

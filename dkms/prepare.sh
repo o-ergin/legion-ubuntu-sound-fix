@@ -1,17 +1,24 @@
 #!/bin/bash
 # DKMS PRE_BUILD for legion-aw88399: assemble sources that match the TARGET kernel exactly.
 # Refuses to build (so the stock drivers stay in use) when anything does not match.
+#
+# Every refusal exits 77. DKMS reports exit 77 as "skipped", not "failed", so a kernel update can
+# never fail because of this package. Without that, `dkms autoinstall` exits 11, and the kernel
+# package's postinst (run-parts --exit-on-error) aborts before the initramfs and GRUB updates.
+# Verified with dkms 3.2.2 on Ubuntu. A later apt run, or legion-aw88399-rebuild, builds it once
+# the matching source is present.
 set -euo pipefail
 KVER="${1:?usage: prepare.sh <kernelver>}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 PKG=linux-source-7.0.0
 TARBALL=/usr/src/$PKG/$PKG.tar.bz2
-die() { echo "legion-aw88399: NOT BUILDING for $KVER: $*" >&2; exit 1; }
+die() { echo "legion-aw88399: NOT BUILDING for $KVER: $*" >&2; exit 77; }
+trap 'die "unexpected error at line $LINENO"' ERR
 
 [[ "$KVER" =~ ^7\.0\.0-([0-9]+)-generic$ ]] || die "only 7.0.0-NN-generic kernels are supported"
 ABI="${BASH_REMATCH[1]}"
 SRCVER="$(dpkg-query -W -f='${Version}' $PKG 2>/dev/null)" || die "$PKG is not installed"
-[[ "$SRCVER" == "7.0.0-${ABI}."* ]] || die "$PKG is $SRCVER but this kernel needs 7.0.0-${ABI}.x (sudo apt install $PKG; sudo dkms autoinstall)"
+[[ "$SRCVER" == "7.0.0-${ABI}."* ]] || die "$PKG is $SRCVER but this kernel needs 7.0.0-${ABI}.x (run: sudo legion-aw88399-rebuild $KVER)"
 [ -r "$TARBALL" ] || die "missing $TARBALL"
 
 T="$HERE/.ksrc"
