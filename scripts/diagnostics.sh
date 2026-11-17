@@ -20,7 +20,7 @@ echo "cmdline (audio-related): $(tr ' ' '\n' </proc/cmdline | grep -iE 'snd|dsp|
 sec "Packages"
 dpkg-query -W -f='${Package} ${Version}\n' dkms linux-source-7.0.0 "linux-modules-$K" "linux-headers-$K" pipewire wireplumber 2>&1
 dkms status legion-aw88399 2>&1
-ls /usr/src | grep legion-aw88399 || echo "no /usr/src/legion-aw88399-*"
+compgen -G "/usr/src/legion-aw88399-*" || echo "no /usr/src/legion-aw88399-*"
 
 sec "Install footprint"
 for f in /lib/firmware/updates/awinic/aw88399_acf_17aa3906.bin /lib/firmware/updates/awinic/aw88399_acf_17aa3907.bin \
