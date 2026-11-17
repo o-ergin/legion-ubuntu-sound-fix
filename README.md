@@ -1,6 +1,6 @@
 # Legion Pro 7 16IAX10H: full speaker sound on Ubuntu 7.0 kernels (AW88399 DKMS backport)
 
-[![build](https://github.com/o-ergin/legion-pro7-16iax10h-aw88399-dkms/actions/workflows/build.yml/badge.svg)](https://github.com/o-ergin/legion-pro7-16iax10h-aw88399-dkms/actions/workflows/build.yml)
+[![build](https://github.com/o-ergin/legion-ubuntu-sound-fix/actions/workflows/build.yml/badge.svg)](https://github.com/o-ergin/legion-ubuntu-sound-fix/actions/workflows/build.yml)
 
 On the Lenovo Legion Pro 7 16IAX10H (Intel, machine type 83F5), Linux only plays through **2 of the 4
 speakers**. The sound is thin, with no bass. The woofers are driven by two **Awinic AW88399** smart
