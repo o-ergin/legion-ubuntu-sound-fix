@@ -11,8 +11,9 @@ you don't have to replace the kernel. That matters on this laptop: its displays 
 which needs the NVIDIA DKMS driver to keep working.
 
 > **Status:** Tested on one machine: Legion Pro 7 16IAX10H (83F5), codec SSID `17aa:3907`, Ubuntu
-> kernel `7.0.0-43-generic`, PipeWire 1.6, legacy HDA. All five checks under
-> [After installing](#after-installing-verify) pass:
+> kernel `7.0.0-43-generic`, PipeWire 1.6, legacy HDA. Checks 1, 2, 4 and 5 under
+> [After installing](#after-installing-verify) pass. Check 3 is verified from the codec routing only,
+> not yet by ear:
 >
 > 1. The firmware loads and the component binds:
 >    - `0x35` is ch0 and `0x34` is ch1
@@ -20,7 +21,8 @@ which needs the NVIDIA DKMS driver to keep working.
 > 2. During playback, both amps read `power=ON pll_locked=yes`.
 >    - Voice tests play on the correct sides.
 >    - 150 Hz tones come from the matching woofer: left channel, left woofer; right channel, right woofer.
-> 3. The bass follows the volume slider. The bass pin `0x17` is now routed to DAC `0x02`.
+> 3. The bass pin `0x17` is now routed to DAC `0x02`, the DAC behind the volume slider, so the bass
+>    should follow it. Not yet confirmed by listening.
 > 4. With headphones plugged in:
 >    - pins `0x14` and `0x17` are muted
 >    - no sound comes from any built-in speaker, woofers included
