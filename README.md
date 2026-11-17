@@ -10,9 +10,25 @@ repository backports that mainline code to **Ubuntu's 7.0.0-NN-generic kernels**
 you don't have to replace the kernel. That matters on this laptop: its displays run on the NVIDIA GPU,
 which needs the NVIDIA DKMS driver to keep working.
 
-> **Status:** Built, signed and installed on Ubuntu kernel 7.0.0-43-generic. The checklist under
-> [After installing](#after-installing-verify) has not yet been run on real hardware. Treat this as
-> experimental until you have checked it on your own machine.
+> **Status:** Tested on one machine: Legion Pro 7 16IAX10H (83F5), codec SSID `17aa:3907`, Ubuntu
+> kernel `7.0.0-43-generic`, PipeWire 1.6, legacy HDA. All five checks under
+> [After installing](#after-installing-verify) pass:
+>
+> 1. The firmware loads and the component binds:
+>    - `0x35` is ch0 and `0x34` is ch1
+>    - the fixup is picked for `17aa:3907`
+> 2. During playback, both amps read `power=ON pll_locked=yes`.
+>    - Voice tests play on the correct sides.
+>    - 150 Hz tones come from the matching woofer: left channel, left woofer; right channel, right woofer.
+> 3. The bass follows the volume slider. The bass pin `0x17` is now routed to DAC `0x02`.
+> 4. With headphones plugged in:
+>    - pins `0x14` and `0x17` are muted
+>    - no sound comes from any built-in speaker, woofers included
+> 5. After S3 suspend and resume:
+>    - the log shows no amp errors
+>    - the amps restart on the next playback, and the bass is unchanged on both sides
+>
+> Other kernels and the `17aa:3906` variant are untested.
 
 ## Supported configuration (the installer refuses anything else)
 
@@ -46,6 +62,13 @@ sudo ./scripts/install.sh
 2. Play a test sound at low volume: `speaker-test -c 2 -t wav -l 1`.
    - While it plays, run `check-amps.sh` again. Both amps should show `power=ON pll_locked=yes`.
    - "Front Left" should come from the left side, including its bass.
+   - To test each woofer on its own, play a 150 Hz tone on one channel. Use `-s 1` for left and
+     `-s 2` for right:
+     `timeout 4 speaker-test -c 2 -t sine -f 150 -s 1`
+     80 Hz is mostly inaudible on laptop woofers.
+   - The amps stay powered while any stream is open, even a paused browser tab. That is normal.
+   - The kernel logs "module verification failed … tainting kernel" when Secure Boot is off.
+     That is expected for an unsigned out-of-tree module and harmless.
 3. Move the volume slider. The bass must follow it.
 4. Plug in headphones. All speakers must go silent.
 5. Suspend, resume, and play again.
