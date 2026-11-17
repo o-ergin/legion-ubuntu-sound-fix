@@ -143,7 +143,8 @@ jobs:
           ls $D/hda/codecs/side-codecs/snd-hda-scodec-aw88399-i2c.ko* >/dev/null ||
             { echo "::error::snd-hda-scodec-aw88399-i2c is missing"; exit 1; }
           ALC=$(ls $D/hda/codecs/realtek/snd-hda-codec-alc269.ko*)
-          zstdcat -f "$ALC" | strings | grep -qx alc287_fixup_legion_16iax10h_aw88399 ||
+          zstdcat -f "$ALC" | strings > /tmp/alc269.strings   # not piped into grep -q: SIGPIPE + pipefail
+          grep -qx alc287_fixup_legion_16iax10h_aw88399 /tmp/alc269.strings ||
             { echo "::error::the Legion AW88399 codec fixup is missing from snd-hda-codec-alc269"; exit 1; }
           FWS=$(modinfo -F firmware "$SC")
           echo "driver requests: $FWS" | tee -a "$GITHUB_STEP_SUMMARY"

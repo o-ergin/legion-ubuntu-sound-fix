@@ -27,7 +27,7 @@ if [ ${#want[@]} -gt 0 ]; then
 fi
 
 rm -f /var/lib/legion-aw88399/skipped-"$K"-*
-if dkms status -m "$PKG" -v "$VER" -k "$K" | grep -q installed; then
+if [[ "$(dkms status -m "$PKG" -v "$VER" -k "$K")" == *installed* ]]; then
 	echo "$PKG/$VER is already installed for $K. Nothing to do."
 	exit 0
 else
