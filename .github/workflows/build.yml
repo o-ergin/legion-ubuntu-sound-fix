@@ -22,6 +22,7 @@ jobs:
   build:
     name: 26.04 backport build (${{ matrix.pocket }})
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     container: ubuntu:26.04
     strategy:
       fail-fast: false
@@ -44,7 +45,8 @@ jobs:
       - name: Pick the newest 7.0 kernel
         id: k
         run: |
-          apt-get update -q
+          apt-get update -q --error-on=any -o Acquire::Retries=5 -o Acquire::http::Timeout=30 ||
+            { echo "::error::Ubuntu archive unreachable from the runner (network problem, not a repo bug). Re-run the job."; exit 1; }
           V=$(apt-cache madison linux-source-7.0.0 | awk '{print $3}' | sort -V | tail -n1)
           [ -n "$V" ] || { echo "linux-source-7.0.0 not found"; exit 1; }
           ABI=${V#7.0.0-}; ABI=${ABI%%.*}
@@ -100,6 +102,7 @@ jobs:
   stock:
     name: 26.10 stock driver (${{ matrix.pocket }})
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     container: ubuntu:26.10
     strategy:
       fail-fast: false
@@ -120,7 +123,8 @@ jobs:
       - name: Download the newest kernel's modules
         id: k
         run: |
-          apt-get update -q
+          apt-get update -q --error-on=any -o Acquire::Retries=5 -o Acquire::http::Timeout=30 ||
+            { echo "::error::Ubuntu archive unreachable from the runner (network problem, not a repo bug). Re-run the job."; exit 1; }
           DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends kmod zstd binutils
           V=$(apt-cache madison linux-image-generic | awk '{print $3}' | sort -V | tail -n1)
           ABI=${V%.*}                                   # 7.3.0-10.10 -> 7.3.0-10
